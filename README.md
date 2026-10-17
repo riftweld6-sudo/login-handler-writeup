@@ -1,37 +1,54 @@
-# The Login Handler That Believed Every Token
+# One assertion to a session
 
-A sanitized vulnerability write-up published as a static GitHub Pages site.
+A sanitized, lab-confined write-up of an identity-assertion validation bypass.
 
-- Repository: `riftweld6-sudo/login-handler-writeup`
-- Published site: `https://riftweld6-sudo.github.io/login-handler-writeup/`
-- Theme: `jekyll-theme-midnight`
-- Build: GitHub Pages, branch `main`, root directory
+- **Live site:** https://riftweld6-sudo.github.io/login-handler-writeup/
+- **Repository:** https://github.com/riftweld6-sudo/login-handler-writeup
+- **Published article:** [`docs/index.html`](docs/index.html)
+- **Markdown source:** [`WRITEUP.md`](WRITEUP.md)
 
-## Local preview
+## Structure
 
-No local build is required. If you want to preview the site with Jekyll:
-
-```bash
-bundle exec jekyll serve
+```text
+.
+├── README.md
+── WRITEUP.md
+└── docs/
+    ├── .nojekyll
+    └── index.html
 ```
 
-## Update and publish
+`docs/index.html` is a self-contained static page. It uses the same visual
+language as the other RiftWeld publications: Sora and IBM Plex Mono, a warm
+orange accent, a sticky table of contents, and a dark code surface.
+
+## Publishing
+
+GitHub Pages is configured to serve the `docs/` directory from `main`.
+
+To update the published page:
 
 ```bash
+# edit docs/index.html and WRITEUP.md
 git add -A
 git commit -m "Update write-up"
 git push
 ```
 
-GitHub Pages rebuilds automatically after each push to `main`.
+Pages rebuilds automatically. The source is static HTML; no Jekyll build step
+is required.
 
-## Configuration
+## Local preview
 
-`_config.yml` already points at the organization Pages site:
-
-```yaml
-url: "https://riftweld6-sudo.github.io"
-baseurl: "/login-handler-writeup"
+```bash
+python3 -m http.server -d docs 8000
 ```
 
-If the repository is renamed, update `baseurl` to match the new repository name.
+Then open `http://localhost:8000/`.
+
+## Sanitization
+
+All company names, domains, IP addresses, endpoints, user identifiers, and
+customer data have been removed or replaced with synthetic values such as
+`api.example.test` and `victim@example.test`. The proof of concept is
+conceptual and omits actionable exploit material.

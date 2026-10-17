@@ -1,9 +1,3 @@
----
-layout: default
-title: "The Login Handler That Believed Every Token"
-description: "A sanitized case study of an identity-assertion validation bypass in a consumer login flow."
----
-
 # The Login Handler That Believed Every Token
 
 **Severity:** High · **Class:** Authentication bypass / identity-assertion validation · **CVE:** Not assigned (placeholder: CVE-202X-XXXXX)

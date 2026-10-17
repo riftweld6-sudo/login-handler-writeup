@@ -1,0 +1,511 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>One assertion to a session: the login handler that trusted email · Rift Weld Labs</title>
+<meta name="description" content="A sanitized, lab-confined reconstruction of an identity-assertion validation bypass: a fallback login branch decoded a client-supplied token and trusted its email claim.">
+<meta property="og:title" content="One assertion to a session">
+<meta property="og:description" content="An unauthenticated login request reaches a fallback provider branch that decodes a client-supplied assertion and trusts its email claim. With device trust satisfied, that is enough to mint a session.">
+<meta property="og:type" content="article">
+<link rel="icon" href="https://riftweld.com/icon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ground:#ffffff;
+    --ground-2:#fbfbfb;
+    --ground-3:#f3f3f3;
+    --ink:#161616;
+    --ink-2:#292929;
+    --muted:#505050;
+    --faint:#6f6f6f;
+    --line:#e3e3e3;
+    --line-2:#d9d9d9;
+    --brand:#f48d0a;
+    --brand-deep:#a64b00;
+    --brand-hover:#d97800;
+    --brand-light:#ffbe62;
+    --brand-line:#f3c47f;
+    --brand-soft:#ffe2b8;
+    --brand-wash:#fff8ee;
+    --code-bg:#161616;
+    --code-ink:#f3f3f3;
+    --code-dim:#8f8f8f;
+    --grot:"Sora",-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;
+    --mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth;scrollbar-color:#c9c9c9 var(--ground-3)}
+  ::selection{background:var(--brand-soft);color:var(--ink)}
+  body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--grot);font-size:16px;line-height:1.65;-webkit-font-smoothing:antialiased}
+  p,li,td,h1,h2,h3{overflow-wrap:break-word}
+  a{color:var(--brand-deep);text-decoration-color:var(--brand-line);text-underline-offset:3px}
+  a:hover{color:var(--brand-hover);text-decoration-color:var(--brand)}
+  :focus-visible{outline:2px solid var(--brand);outline-offset:3px;border-radius:2px}
+  .skip{position:absolute;left:-9999px;top:0;background:var(--ink);color:#fff;padding:10px 16px;z-index:99}
+  .skip:focus{left:8px;top:8px}
+  .wrap{max-width:1180px;margin:0 auto;padding:0 clamp(16px,3vw,24px)}
+
+  /* header */
+  .top{border-bottom:1px solid var(--line)}
+  .top .wrap{display:flex;align-items:center;justify-content:space-between;gap:16px;padding-top:18px;padding-bottom:18px}
+  .mark{font-weight:700;font-size:19px;letter-spacing:-.02em;color:var(--ink);text-decoration:none}
+  .mark:hover{color:var(--ink)}
+  .mark .w{border-bottom:2px solid var(--brand);padding-bottom:1px}
+  .top nav{display:flex;gap:22px}
+  .top nav a{font-family:var(--mono);font-size:12.5px;letter-spacing:.02em;color:var(--muted);text-decoration:none}
+  .top nav a:hover{color:var(--brand-deep)}
+
+  /* hero */
+  .hero{padding:0}
+  .hero-grid{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,.95fr);gap:clamp(32px,5vw,72px);align-items:center;padding:clamp(48px,7vw,88px) clamp(16px,3vw,24px) clamp(52px,6.5vw,76px)}
+  .hero-grid>*,.layout>*{min-width:0}
+  .hero-rule{border-top:1px solid var(--line)}
+  .plabel{font-family:var(--mono);font-size:12.5px;font-weight:500;letter-spacing:.04em;color:var(--brand-deep);margin:0 0 18px}
+  .plabel b{color:var(--faint);font-weight:500}
+  h1{font-size:clamp(2rem,4.6vw,3.35rem);line-height:1.06;letter-spacing:-.03em;font-weight:600;margin:0 0 20px;text-wrap:balance}
+  .dek{font-size:clamp(1.02rem,1.5vw,1.16rem);color:var(--muted);max-width:60ch;margin:0 0 26px;text-wrap:pretty}
+  .meta{display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px;font-family:var(--mono);font-size:12.5px;color:var(--faint)}
+  .meta .dot{color:var(--line-2)}
+  .badge{font-family:var(--mono);font-size:12px;font-weight:600;letter-spacing:.02em;padding:4px 10px;border-radius:999px;border:1px solid var(--brand-line);background:var(--brand-wash);color:var(--brand-deep)}
+  .badge.alt{border-color:var(--line-2);background:var(--ground-2);color:var(--muted)}
+
+  /* wire panel */
+  .wire{background:var(--code-bg);border-radius:12px;padding:22px 22px 18px;font-family:var(--mono);font-size:12.75px;line-height:1.75;color:var(--code-ink);box-shadow:0 18px 40px -24px rgba(22,22,22,.45);overflow:hidden}
+  .wire .bar{display:flex;align-items:center;gap:8px;margin-bottom:14px}
+  .wire .bar i{width:9px;height:9px;border-radius:50%;background:#3a3a3a;display:block}
+  .wire .bar span{margin-left:auto;font-size:12px;color:var(--code-dim);letter-spacing:.03em}
+  .wire p{margin:0 0 10px;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word}
+  .wire .req{color:#f3f3f3}
+  .wire .method{color:var(--brand-light);font-weight:600}
+  .wire .cmt{color:var(--code-dim)}
+  .wire .pay{color:#d8d8d8}
+  .wire .code400{color:#ababab}
+  .wire .code200{color:var(--brand-light);font-weight:600}
+  .wire .adminline{color:var(--brand-light)}
+  .wire .caret{display:inline-block;width:8px;height:15px;background:var(--brand);vertical-align:-2px;margin-left:6px;animation:blink 1.1s steps(1) infinite}
+  @keyframes blink{50%{opacity:0}}
+  @media (prefers-reduced-motion:reduce){.wire .caret{animation:none}}
+
+  /* layout */
+  .layout{display:grid;grid-template-columns:212px minmax(0,1fr);gap:clamp(32px,5vw,64px);padding-top:clamp(40px,5vw,64px)}
+  main{max-width:760px;min-width:0}
+  .toc{position:sticky;top:28px;align-self:start;font-family:var(--mono);font-size:12.5px}
+  .toc h2{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);font-weight:600;margin:0 0 14px}
+  .toc ul{list-style:none;margin:0;padding:0}
+  .toc li{margin:0 0 9px}
+  .toc a{color:var(--muted);text-decoration:none;display:block;padding-left:14px;border-left:2px solid var(--line);line-height:1.45}
+  .toc a:hover{color:var(--brand-deep);border-left-color:var(--brand)}
+
+  section{margin:0 0 clamp(44px,6vw,64px)}
+  h2{font-size:clamp(1.35rem,2.4vw,1.7rem);letter-spacing:-.02em;line-height:1.2;font-weight:600;margin:0 0 8px;text-wrap:balance}
+  .sec-label{font-family:var(--mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--brand-deep);font-weight:600;margin:0 0 10px}
+  h3{font-size:1.08rem;font-weight:600;letter-spacing:-.01em;margin:28px 0 8px}
+  p{margin:0 0 16px;max-width:72ch;text-wrap:pretty}
+  ul,ol{margin:0 0 16px;padding-left:22px;max-width:70ch}
+  li{margin:0 0 7px}
+  strong{font-weight:600}
+  .lead{font-size:1.06rem;color:var(--ink-2)}
+
+  pre{background:var(--code-bg);color:var(--code-ink);font-family:var(--mono);font-size:12.75px;line-height:1.7;padding:18px 20px;border-radius:10px;overflow-x:auto;margin:0 0 20px;box-shadow:0 14px 34px -26px rgba(22,22,22,.5)}
+  code{font-family:var(--mono);font-size:.92em}
+  p code,li code,td code{background:var(--ground-3);border:1px solid var(--line);border-radius:4px;padding:1px 5px;color:var(--ink-2)}
+  pre .k{color:var(--brand-light)}
+  pre .c{color:var(--code-dim)}
+  pre .hl{color:var(--brand-light);font-weight:600}
+  pre .g{color:#c9c9c9}
+
+  .callout{background:var(--brand-wash);border:1px solid var(--brand-line);border-radius:10px;padding:20px 22px;margin:0 0 20px}
+  .callout h3{margin:0 0 8px;font-size:.98rem}
+  .callout p:last-child,.callout ul:last-child{margin-bottom:0}
+  .callout.plain{background:var(--ground-2);border-color:var(--line)}
+
+  figure.replies{margin:26px 0 24px}
+  .replies img{width:100%;height:auto;display:block;border:1px solid var(--line);border-radius:10px;margin:0 0 14px;background:#fff}
+  .replies figcaption{font-size:.88rem;color:var(--faint);max-width:72ch}
+
+  figure.emails{margin:26px 0 24px}
+  figure.emails details{border:1px solid var(--line);border-radius:10px;background:var(--ground);margin:0 0 12px}
+  figure.emails summary{cursor:pointer;padding:13px 18px;font-weight:600;font-size:.95rem;letter-spacing:-.01em}
+  figure.emails summary::marker{color:var(--brand)}
+  figure.emails details[open] summary{border-bottom:1px solid var(--line)}
+  figure.emails .msg{padding:16px 18px 6px}
+  figure.emails .hdr{font-family:var(--mono);font-size:12.5px;color:var(--muted);line-height:1.7;margin:0 0 14px}
+  figure.emails pre{background:var(--ground-2);color:var(--ink-2);border:1px solid var(--line);border-radius:8px;box-shadow:none;font-size:12.5px;white-space:pre-wrap;overflow-wrap:anywhere;padding:16px 18px;margin:0 0 12px}
+  figure.emails .rednote{font-size:.84rem;color:var(--faint);margin:0 0 12px}
+  figure.emails figcaption{font-size:.88rem;color:var(--faint);max-width:72ch}
+
+  table{width:100%;border-collapse:collapse;font-size:.92rem;margin:0 0 20px}
+  th{font-family:var(--mono);font-size:12px;letter-spacing:.02em;text-transform:uppercase;color:var(--faint);font-weight:600;text-align:left;padding:0 14px 9px 0;border-bottom:1px solid var(--ink)}
+  td{padding:11px 14px 11px 0;border-bottom:1px solid var(--line);vertical-align:top}
+  td:last-child,th:last-child{padding-right:0}
+  td.mono,.mono{font-family:var(--mono);font-size:12.5px;font-variant-numeric:tabular-nums}
+  td .sub{display:block;color:var(--faint);font-size:.85rem;margin-top:2px}
+  .ok{color:var(--brand-deep);font-weight:600}
+  .no{color:var(--faint)}
+
+  .chain{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin:0 0 20px}
+  .card{border:1px solid var(--line);border-radius:10px;padding:18px 18px 16px;background:var(--ground)}
+  .card .n{font-family:var(--mono);font-size:12px;color:var(--brand-deep);font-weight:600;letter-spacing:.02em;margin:0 0 10px;display:block}
+  .card h3{margin:0 0 8px;font-size:.98rem}
+  .card p{font-size:.9rem;color:var(--muted);margin:0}
+  .card p code{font-size:.85em}
+
+  .refs{list-style:none;padding:0}
+  .refs li{border-bottom:1px solid var(--line);padding:13px 0;margin:0;display:flex;gap:14px;align-items:baseline}
+  .refs .r-tag{font-family:var(--mono);font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--faint);min-width:110px;flex-shrink:0}
+  .refs a{font-size:.95rem}
+
+  footer{margin-top:clamp(64px,8vw,96px);background:#161616;color:#cfcfcf}
+  .foot-grid{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,.8fr) minmax(0,.8fr);gap:clamp(28px,5vw,64px);padding:clamp(44px,6vw,64px) 0 40px}
+  footer .fh{font-family:var(--mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--brand-light);font-weight:600;margin:0 0 16px}
+  footer .mark{color:#fff}
+  footer p{color:#ababab;font-size:.9rem;max-width:44ch}
+  footer ul{list-style:none;padding:0;margin:0}
+  footer li{margin:0 0 10px}
+  footer a{color:#e3e3e3;text-decoration:none;font-size:.92rem}
+  footer a:hover{color:var(--brand-light);text-decoration:underline;text-decoration-color:var(--brand)}
+  .foot-bot{border-top:1px solid #3a3a3a;padding:18px 0 26px;font-family:var(--mono);font-size:12px;color:#8f8f8f;display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}
+  .foot-bot a{color:#8f8f8f}
+
+  @media (max-width:1023px){
+    .hero-grid{grid-template-columns:1fr}
+    .layout{grid-template-columns:1fr}
+    .toc{position:static;border:1px solid var(--line);border-radius:10px;padding:18px 20px;background:var(--ground-2)}
+    .toc ul{columns:2;column-gap:24px}
+  }
+  @media (max-width:680px){
+    .chain{grid-template-columns:1fr}
+    .toc ul{columns:1}
+    .foot-grid{grid-template-columns:1fr}
+    .wire{font-size:12px;padding:18px 16px}
+    .top nav{gap:14px}
+    .dek{font-size:1rem}
+  }
+  @media (max-width:420px){
+    .top nav a:first-child{display:none}
+  }
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="top">
+  <div class="wrap">
+    <a class="mark" href="https://riftweld.com/">Rift<span class="w">Weld</span></a>
+    <nav>
+      <a href="https://riftweld.com/labs">Labs &amp; Research</a>
+      <a href="https://github.com/riftweld6-sudo/login-handler-writeup">GitHub&#8202;↗</a>
+    </nav>
+  </div>
+</header>
+
+<div class="hero">
+  <div class="wrap hero-grid">
+    <div>
+      <p class="plabel">Case study 014 · <b>Authentication bypass</b></p>
+      <h1>One assertion to a session: the login handler that trusted email</h1>
+      <p class="dek">An unauthenticated login request could reach a fallback provider branch that decoded a client-supplied assertion and trusted its <code>email</code> claim. When the account's device-trust check was satisfied, that was enough to mint a session; an unregistered email became a confirmed account. A sanitized, lab-confined reconstruction.</p>
+      <div class="meta">
+        <span class="badge">High severity</span>
+        <span class="badge alt">Identity assertion bypass</span>
+        <span>Fixed</span>
+        <span class="dot">·</span>
+        <span>October 2026</span>
+        <span class="dot">·</span>
+        <span>~8 min read</span>
+      </div>
+    </div>
+    <div class="wire" role="figure" aria-label="Wire trace: an unauthenticated login request reaching a session">
+      <div class="bar"><i></i><i></i><i></i><span>wire trace · synthetic lab</span></div>
+      <p class="req"><span class="method">POST</span> /v1/login
+<span class="pay">{ "provider": "unexpected-provider",
+  "assertion": "&lt;client-supplied&gt;",
+  "email": "victim@example.test" }</span></p>
+      <p class="code200">→ 200  challengeType 0   <span class="cmt">// trusted device</span></p>
+      <p class="req" style="margin-top:14px"><span class="method">GET</span> /v1/profile
+<span class="pay">Authorization: Bearer &lt;session&gt;</span></p>
+      <p class="code200">→ 200  "email": "victim@example.test"<span class="caret"></span></p>
+    </div>
+  </div>
+</div>
+
+<div class="hero-rule"></div>
+
+<div class="wrap layout">
+  <aside class="toc">
+    <h2>In this write-up</h2>
+    <ul>
+      <li><a href="#summary">Summary</a></li>
+      <li><a href="#scope">What this can and cannot establish</a></li>
+      <li><a href="#timeline">Timeline</a></li>
+      <li><a href="#rootcause">Root cause</a></li>
+      <li><a href="#consequences">Three consequences</a></li>
+      <li><a href="#chain">The full chain</a></li>
+      <li><a href="#impact">Impact</a></li>
+      <li><a href="#fix">The fix</a></li>
+      <li><a href="#method">Lab method</a></li>
+      <li><a href="#disclosure">Disclosure</a></li>
+      <li><a href="#references">References</a></li>
+    </ul>
+  </aside>
+
+  <main id="main">
+    <section id="summary">
+      <p class="sec-label">Summary</p>
+      <h2>What happened, and what we did</h2>
+      <p class="lead">An unauthenticated request to the login endpoint could reach a fallback provider branch that decoded a client-supplied identity assertion and used its <code>email</code> claim to find or create an account. The branch did not verify the assertion's signature, issuer, audience, or lifetime. The only remaining gate was device trust: when the presented device pair was already trusted for the account, the service minted a session; otherwise it returned a mailbox challenge. An unregistered email created a new confirmed account. The root cause was not a clever payload. It was a trust decision made in the wrong order.</p>
+      <ul>
+        <li><strong>Reachable by anyone:</strong> an unauthenticated <code>POST /v1/login</code> with a provider value outside the validated set.</li>
+        <li><strong>Three outcomes:</strong> an existing-account session when device trust was satisfied, an account factory for unregistered emails, and an adoption persistence layer after a later password reset.</li>
+        <li><strong>Scope:</strong> all testing was lab-confined, with self-owned accounts and synthetic data. No third-party system was touched.</li>
+        <li><strong>Fix:</strong> verify the assertion before any account lookup, map by <code>(iss, sub)</code>, and remove the permissive fallback branch.</li>
+      </ul>
+    </section>
+
+    <section id="scope">
+      <p class="sec-label">Scope</p>
+      <h2>What this publication can and cannot establish</h2>
+      <div class="callout">
+        <h3>Can establish</h3>
+        <ul>
+          <li>The fallback branch decoded and trusted the assertion without signature, issuer, audience, or time validation.</li>
+          <li>The device-trust gate, its preconditions, and the difference between a trusted and an unknown device.</li>
+          <li>The account factory and the adoption persistence layer, reproduced with self-owned accounts.</li>
+          <li>The fix: verification before lookup, a closed provider allowlist, and device policy applied after identity verification.</li>
+        </ul>
+      </div>
+      <div class="callout plain">
+        <h3>Cannot establish</h3>
+        <ul>
+          <li><strong>Universal zero-click takeover.</strong> The device-trust check was real and blocked unknown devices.</li>
+          <li><strong>MFA bypass.</strong> Accounts with an additional factor took a different challenge path.</li>
+          <li><strong>Production exploitation.</strong> No production system, customer account, or third-party data was used.</li>
+          <li><strong>Original discovery.</strong> This is a sanitized case study, not a claim of first report or victim impact.</li>
+        </ul>
+      </div>
+    </section>
+
+    <section id="timeline">
+      <p class="sec-label">Timeline</p>
+      <h2>How the disclosure moved</h2>
+      <table>
+        <thead><tr><th>Time</th><th>Event</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">T0</td><td>Reproduced in a controlled lab with self-owned accounts <span class="sub">No third-party systems touched</span></td></tr>
+          <tr><td class="mono">T0</td><td>Report submitted with a minimal, non-destructive harness</td></tr>
+          <tr><td class="mono">T+1</td><td>Acknowledged by the program</td></tr>
+          <tr><td class="mono">T+2</td><td>Fix deployed</td></tr>
+          <tr><td class="mono">T+3</td><td>Retest confirmed the assertion was rejected</td></tr>
+          <tr><td class="mono">T+30</td><td>Sanitized write-up published with permission</td></tr>
+        </tbody>
+      </table>
+      <p>Exact dates and program identifiers are withheld. The timeline is intentionally relative.</p>
+    </section>
+
+    <section id="rootcause">
+      <p class="sec-label">Root cause</p>
+      <h2>A fallback branch that trusted the request body</h2>
+      <p>The login service had a branch per provider. Each known provider validated its own assertion, then mapped the result to a local account. That was the intended design.</p>
+      <p>The default branch was different. When the <code>provider</code> value did not match a validated provider, the handler fell through to an arm that treated the assertion as if an earlier step had already verified it. It decoded the token, read the claims, and used <code>email</code> to find or create an account.</p>
+      <pre><code><span class="c">// fallback branch, simplified</span>
+const claims = decode(assertion);        <span class="hl">// decode, not verify</span>
+const user = await users.findByEmail(claims.email);
+
+if (await deviceIsTrusted(user, deviceFingerprint)) {
+  return issueSession(user);
+}</code></pre>
+      <p>Three things compound. First, <code>decode</code> parses a token; it does not establish who issued it. Second, <code>email</code> is a mutable profile field, not a stable identity key. Third, the handler asked whether the device was trusted <em>before</em> it had established that the assertion was trustworthy.</p>
+      <div class="callout">
+        <h3>The device check was not the bug</h3>
+        <p>Device trust can answer “have I seen this device before?” It cannot answer “did this identity provider vouch for this person?” The bug was that, on this path, it was the only check left.</p>
+      </div>
+    </section>
+
+    <section id="consequences">
+      <p class="sec-label">Consequences</p>
+      <h2>Three outcomes, one root cause</h2>
+      <div class="chain">
+        <div class="card">
+          <span class="n">Existing account</span>
+          <h3>Session, if the device is trusted</h3>
+          <p>A trusted device pair plus a forged assertion returned <code>200 challengeType 0</code> and an authorization code. The resulting session read the profile. From an unknown device, the same request returned <code>202</code> and no session.</p>
+        </div>
+        <div class="card">
+          <span class="n">Unregistered email</span>
+          <h3>An account factory</h3>
+          <p>The same branch auto-provisioned an account for an unregistered email and marked it confirmed. At the measured sample, the flow allowed one request per account and showed no rate limit.</p>
+        </div>
+        <div class="card">
+          <span class="n">Adoption</span>
+          <h3>Trust that survived a reset</h3>
+          <p>An attacker could squat an address, wait for the owner to register and reset, and keep device trust across the reset. A post-reset forged login from the squatting device reached the adopted account silently.</p>
+        </div>
+      </div>
+      <p>These are not three separate vulnerabilities. They are three ways the same missing verification expresses itself: a session for an account that already exists, a new account that should never exist, and a persistence layer that survives the owner's recovery attempt.</p>
+    </section>
+
+    <section id="chain">
+      <p class="sec-label">The chain</p>
+      <h2>From unauthenticated POST to session</h2>
+      <h3>Phase A: an existing account with a trusted device</h3>
+      <pre><code>POST /v1/login HTTP/1.1
+Host: api.example.test
+Content-Type: application/json
+
+{
+  "provider": "unexpected-provider",
+  "assertion": "&lt;client-supplied identity assertion&gt;",
+  "email": "victim@example.test",
+  "deviceFingerprint": "&lt;trusted-device-fingerprint&gt;",
+  "deviceRequestId": "&lt;trusted-device-request-id&gt;"
+}</code></pre>
+      <pre><code>HTTP/1.1 200 OK
+Content-Type: application/json
+
+{
+  "challengeType": 0,
+  "authorizationCode": "&lt;opaque-code&gt;",
+  "user": {
+    "id": "&lt;victim-user-id&gt;",
+    "email": "victim@example.test"
+  }
+}</code></pre>
+      <p>The authorization code could be exchanged for a session, and the session could read the profile. The same request from an unknown device returned <code>202</code> with a mailbox challenge and no session. Missing device fields returned <code>400</code>.</p>
+
+      <h3>Phase B: an unregistered email</h3>
+      <p>Change the claim to an address that does not exist yet. The branch creates a new identity, marks it confirmed, and makes the forging device the account's first trusted device. The attacker now has a normal-looking consumer account without proving control of the mailbox.</p>
+
+      <h3>Phase C: adoption after a later reset</h3>
+      <p>If the real owner later registers and resets the password, the reset does not necessarily evict the squatter's device trust. The post-reset forged login from the squatting device can still return <code>200</code>, while the owner's own new device is challenged. That is the persistence layer, and it is why “the account was empty” is not a complete mitigation.</p>
+
+      <table>
+        <thead><tr><th>Scenario</th><th>Observed result</th></tr></thead>
+        <tbody>
+          <tr><td>Forged assertion, trusted device</td><td class="ok">200, session issued</td></tr>
+          <tr><td>Forged assertion, unknown device</td><td>202, mailbox challenge, no session</td></tr>
+          <tr><td>Missing or empty device fields</td><td class="no">400, rejected</td></tr>
+          <tr><td>Forged assertion, unregistered email</td><td class="ok">200, new confirmed account</td></tr>
+          <tr><td>Known provider, forged assertion</td><td>Provider-specific rejection</td></tr>
+          <tr><td>Fixed build, forged assertion</td><td class="ok">Rejected before lookup</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="impact">
+      <p class="sec-label">Impact</p>
+      <h2>High, with a precondition that matters</h2>
+      <p>For an existing account, the impact is a full session: profile reads and user-level actions as the victim. The precondition is real. The attacker needs a trusted device pair or the ability to complete the mailbox challenge. That is why this is High rather than Critical, and why “any unauthenticated request can take over any account” would be the wrong claim.</p>
+      <p>For an unregistered email, the impact is an account factory: attacker-created identities that look confirmed, can consume trial or promotional entitlements, and can be used as the anchor for an adoption attempt. The measured sample showed no rate limit on the direct path.</p>
+      <p>The forged identity was also accepted by a separate legacy storefront, which exposed order history and profile data. That downstream trust is the broader lesson: the login endpoint was not the only relying party. Every service that accepts the session must either validate the assertion or trust only the session minted after validation.</p>
+    </section>
+
+    <section id="fix">
+      <p class="sec-label">The fix</p>
+      <h2>Verify first, then decide</h2>
+      <p>The fix is not a better regex or a longer blocklist. It is a different order of operations, plus a smaller attack surface:</p>
+      <ol>
+        <li><strong>Verify before decode.</strong> Treat every client-supplied assertion as untrusted input. Verify the signature with the issuer's current JWKS, enforce an algorithm allowlist, and reject <code>none</code>.</li>
+        <li><strong>Pin the context.</strong> Check <code>iss</code> against the expected issuer and <code>aud</code> against your client ID. If the token can carry multiple audiences, check the authorized party as the specification requires.</li>
+        <li><strong>Enforce time.</strong> Reject expired tokens, tokens that are not yet valid, and tokens issued outside a small clock skew.</li>
+        <li><strong>Map by <code>(iss, sub)</code>.</strong> Use the stable subject identifier. Treat email as profile data, not as a primary key.</li>
+        <li><strong>Delete the fallback.</strong> Replace the default provider arm with an explicit allowlist. Unknown providers should fail closed, not fall into a permissive branch.</li>
+        <li><strong>Keep device trust in its lane.</strong> Apply device policy after identity verification. A trusted device can reduce friction; it cannot substitute for proof of identity.</li>
+      </ol>
+      <pre><code><span class="c">// Pseudocode. Use a maintained library and your provider's JWKS.</span>
+const { payload } = await verifyAssertion(assertion, {
+  algorithms: ["RS256"],
+  issuer: TRUSTED_ISSUER,
+  audience: CLIENT_ID,
+  clockTolerance: 60
+});
+
+const user = await users.findByProviderSubject(payload.iss, payload.sub);
+
+<span class="c">// Device policy is a second decision, not a replacement for the first.</span>
+if (!(await deviceIsTrusted(user, deviceFingerprint))) {
+  return challenge(user);
+}
+return issueSession(user);</code></pre>
+      <p>Centralize the verification function and make every login path call it. Then add the negative matrix to CI: self-signed, <code>alg: none</code>, wrong issuer, wrong audience, expired, future-dated, and wrong-subject assertions. Test the branch you think is dead.</p>
+    </section>
+
+    <section id="method">
+      <p class="sec-label">Lab method</p>
+      <h2>How the reconstruction was verified</h2>
+      <p>The work ran in a controlled staging environment with self-owned accounts and synthetic claims. The harness minted assertions with controlled properties and presented them to the login endpoint. Each test changed one property at a time: signature, algorithm, issuer, audience, time, device state, or email registration state.</p>
+      <table>
+        <thead><tr><th>Assertion variant</th><th>Correct result</th><th>Observed result</th></tr></thead>
+        <tbody>
+          <tr><td>Signed with a key the server never checked</td><td>Reject</td><td class="no">Accepted</td></tr>
+          <tr><td><code>alg: none</code></td><td>Reject</td><td class="no">Accepted</td></tr>
+          <tr><td>Symmetric algorithm with an attacker-chosen key</td><td>Reject</td><td class="no">Accepted</td></tr>
+          <tr><td>Expired <code>exp</code></td><td>Reject</td><td class="no">Accepted</td></tr>
+          <tr><td><code>nbf</code> / <code>iat</code> in the future</td><td>Reject</td><td class="no">Accepted</td></tr>
+          <tr><td>Wrong issuer or audience</td><td>Reject</td><td class="no">Accepted</td></tr>
+        </tbody>
+      </table>
+      <div class="callout plain">
+        <h3>Correction we published forward</h3>
+        <p>An early run used a malformed request body and returned <code>500</code>, which looked like a patch. The harness-exact shape reproduced the <code>200</code>. The false negative is kept in the record. Separately, the device key was the visitor pair resolved from the request identifier, not the claimed string; that correction matters for anyone trying to reproduce the precondition.</p>
+      </div>
+      <p>Everything in this write-up is synthetic: the domains, the accounts, the assertion values, and the session identifiers. The repository contains the sanitized write-up and no live credentials, tokens, or customer data.</p>
+    </section>
+
+    <section id="disclosure">
+      <p class="sec-label">Disclosure</p>
+      <h2>Responsible publication</h2>
+      <div class="callout">
+        <p>This issue was responsibly disclosed to the affected program. The program reviewed the finding, fixed it, and permitted this sanitized write-up for educational purposes. All company names, domains, IP addresses, endpoints, user identifiers, and customer data have been removed or replaced with synthetic values such as <code>api.example.test</code>, <code>victim@example.test</code>, and <code>CVE-202X-XXXXX</code>.</p>
+        <p>The proof of concept is conceptual. It shows the trust boundary and the failing order of operations, not an actionable, unremediated exploit payload. <code>CVE-202X-XXXXX</code> is a placeholder; no CVE was assigned to this sanitized case study.</p>
+      </div>
+    </section>
+
+    <section id="references">
+      <p class="sec-label">References</p>
+      <h2>Primary sources</h2>
+      <ul class="refs">
+        <li><span class="r-tag">JWT</span><a href="https://datatracker.ietf.org/doc/html/rfc7519">RFC 7519: JSON Web Token</a></li>
+        <li><span class="r-tag">OIDC</span><a href="https://openid.net/specs/openid-connect-core-1_0.html">OpenID Connect Core 1.0</a></li>
+        <li><span class="r-tag">Guidance</span><a href="https://cheatsheetseries.owasp.org/cheatsheets/JSON_Web_Token_for_Java_Cheat_Sheet.html">OWASP: JWT cheat sheet</a></li>
+        <li><span class="r-tag">Vendor</span><a href="https://developers.google.com/identity/gsi/web/guides/verify-google-id-token">Google: verify an ID token on your server</a></li>
+        <li><span class="r-tag">This work</span><a href="https://github.com/riftweld6-sudo/login-handler-writeup">Repository: sanitized write-up</a></li>
+      </ul>
+    </section>
+  </main>
+</div>
+
+<footer>
+  <div class="wrap">
+    <div class="foot-grid">
+      <div>
+        <a class="mark" href="https://riftweld.com/">Rift<span class="w">Weld</span></a>
+        <p style="margin-top:16px">Security research and review methods. Each publication states what it can and cannot establish.</p>
+      </div>
+      <div>
+        <h3 class="fh">This publication</h3>
+        <ul>
+          <li><a href="https://github.com/riftweld6-sudo/login-handler-writeup">Repository &#8599;</a></li>
+          <li><a href="https://github.com/riftweld6-sudo/login-handler-writeup/blob/main/WRITEUP.md">Full write-up (Markdown) &#8599;</a></li>
+          <li><a href="https://github.com/riftweld6-sudo/login-handler-writeup/blob/main/docs/index.html">Page source &#8599;</a></li>
+        </ul>
+      </div>
+      <div>
+        <h3 class="fh">Rift Weld</h3>
+        <ul>
+          <li><a href="https://riftweld.com/labs">Labs &amp; Research &#8599;</a></li>
+          <li><a href="https://riftweld.com/labs/report-a-vulnerability">Report a vulnerability &#8599;</a></li>
+          <li><a href="https://riftweld.com/labs/disclosure-policy">Disclosure policy &#8599;</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="foot-bot">
+      <span>© 2026 Rift Weld · Authentication bypass research</span>
+      <span>Published October 2026 · Lab-confined · Synthetic data only</span>
+    </div>
+  </div>
+</footer>
+</body>
+</html>
