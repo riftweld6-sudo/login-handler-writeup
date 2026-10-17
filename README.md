@@ -2,8 +2,8 @@
 
 A sanitized vulnerability write-up published as a static GitHub Pages site.
 
-- Repository: `Riftweld/login-handler-writeup`
-- Published site: `https://riftweld.github.io/login-handler-writeup/`
+- Repository: `riftweld6-sudo/login-handler-writeup`
+- Published site: `https://riftweld6-sudo.github.io/login-handler-writeup/`
 - Theme: `jekyll-theme-midnight`
 - Build: GitHub Pages, branch `main`, root directory
 
@@ -30,7 +30,7 @@ GitHub Pages rebuilds automatically after each push to `main`.
 `_config.yml` already points at the organization Pages site:
 
 ```yaml
-url: "https://riftweld.github.io"
+url: "https://riftweld6-sudo.github.io"
 baseurl: "/login-handler-writeup"
 ```
 
