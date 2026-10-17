@@ -12,7 +12,7 @@ A sanitized, lab-confined write-up of an identity-assertion validation bypass.
 ```text
 .
 ├── README.md
-── WRITEUP.md
+├── WRITEUP.md
 └── docs/
     ├── .nojekyll
     └── index.html
