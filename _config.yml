@@ -1,0 +1,9 @@
+title: "The Login Handler That Believed Every Token"
+description: "A sanitized case study of an identity-assertion validation bypass in a consumer login flow."
+theme: jekyll-theme-midnight
+url: "https://riftweld.github.io"
+baseurl: "/login-handler-writeup"
+lang: en
+markdown: kramdown
+plugins:
+  - jekyll-seo-tag
